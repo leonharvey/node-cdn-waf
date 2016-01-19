@@ -1,0 +1,15 @@
+{
+    "sites": {
+        "www.example.com": {
+            "host_forward": "http://example2.com",
+            "proxy_ip": "localhost",
+            "proxy_port": "8001",
+            "config": {
+                "layer": true,
+                "countries_restricted": [],
+                "static_site": true,
+                "cache_in_memory": true
+            }
+        }
+    }
+}
