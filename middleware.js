@@ -1,10 +1,10 @@
-var connect     = require('connect');
-var compression = require('compression');
-var md5         = require('md5');
-var fs          = require('fs');
-var path        = require('path');
-var request     = require('request');
+const compression = require('compression');
+const md5         = require('md5');
+const fs          = require('fs');
+const path        = require('path');
+const request     = require('request');
 var MMDBReader  = require('mmdb-reader');
+var connect     = require('connect');
 var app         = connect();
 var gateway     = require(__dirname + '/app');
 var sites       = require(__dirname + '/sites');
