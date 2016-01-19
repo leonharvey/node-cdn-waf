@@ -1,9 +1,11 @@
-const compression = require('compression');
 const compressor  = require('node-minify');
+const imagemin    = require('imagemin');
 const md5         = require('md5');
 const fs          = require('fs');
 const path        = require('path');
 const request     = require('request');
+
+var compression = require('compression');
 var MMDBReader  = require('mmdb-reader');
 var connect     = require('connect');
 var app         = connect();
@@ -134,20 +136,51 @@ app.use(function(req, res, next) {
 
 //Cache file fetch
 app.use(function(req, res, next) {
-    if (req.static_resource) {
+
+    if (req.static_resource || req.site.config.static_site) {
         var cache_data = fetchCache(req.site, req.cache_file);
 
-        if (cache_data)
-            return res.end(cache_data);
+        if (cache_data) {
+            var content_type = null;
+            
+            if (contentExists(req.ext)) {
+                switch(req.ext) {
+                    case '.css':
+                        content_type = 'text/css';
+                        break;
+                    case '.js':
+                        content_type = 'text/javascript';
+                        break;
+                    case '.jpg':
+                        content_type = 'image/jpeg';
+                        break;
+                    case '.png':
+                        content_type = 'image/png';
+                        break;
+                }
+            } else {
+                content_type = 'text/html';
+            }
 
+            if (content_type !== null)
+                res.setHeader('Content-Type', content_type)
+            
+            if (req.static_resource)
+                res.setHeader('Cache-Control', 'public, max-age=' + 3600 * 24 * 7);
+            
+            res.write(cache_data);
+            res.flush();
+            
+            return res.end();
+        }
         request({ url: req.site.host_forward + req.url, encoding: null}, function(error, response, body) {
             if (error) console.log(error);
 
             if (!error && response.statusCode == 200) {
                 res.end(body);
 
-                storeCache(req.cache_file, body, function() {
-                    compressionHandler(req.ext, req.cache_file);
+                storeCache(req.site, req.cache_file, body, function() {
+                    compressionHandler(req.site, req.ext, req.cache_file);
                 });
             }
             else {
@@ -162,10 +195,10 @@ app.use(function(req, res, next) {
     }
 });
 
-function compressionHandler(ext, filename) {
+function compressionHandler(site, ext, filename) {
     if (contentExists(ext)) {
         var cache_file = __dirname + '/cache/' + filename;
-         console.log(cache_file);
+
         switch (ext) {
             case '.js':
                 docAsset();
@@ -174,9 +207,23 @@ function compressionHandler(ext, filename) {
                 docAsset();
                 break;
             case '.png':
+                imageAsset();
+                break;
+            case '.jpg':
+                imageAsset();
                 break;
         }
 
+
+        function imageAsset() {
+            new imagemin()
+            .src(cache_file)
+            .dest(__dirname + '/cache/' + filename.split('/')[0])
+            .run(function (err, files) {
+                if (err) return console.log(err);
+            });
+        }
+        
         function docAsset() {
             new compressor.minify({
                 type: 'yui-' + (ext == '.js' ? 'js' : 'css'),
@@ -185,7 +232,8 @@ function compressionHandler(ext, filename) {
                 callback: function(err, min) {
                     if (err) return console.log(err);
                     
-                    memory_cache[filename] = min;
+                    if (site.config.cache_in_memory)
+                        memory_cache[filename] = min;
                 }
             });
         }
@@ -194,15 +242,19 @@ function compressionHandler(ext, filename) {
 
 function fetchCache(site, key) {
     if (site.config.cache_in_memory) {
-        if (typeof memory_cache[key] !== 'undefined') return memory_cache[key];
+        if (typeof memory_cache[key] !== 'undefined') {
+            return memory_cache[key];
+        }
     }
 
     try {
         var cache_fetch = fs.readFileSync(__dirname + '/cache/' + key).toString();
     }
     catch (e) { console.log('Cache file not found') }
-
+    //console.log(cache_fetch);
     if (contentExists(cache_fetch)) {
+        cache_fetch = new Buffer(cache_fetch, 'binary');
+        
         if (site.config.cache_in_memory)
             memory_cache[key] = cache_fetch;
 
@@ -210,15 +262,17 @@ function fetchCache(site, key) {
     }
 }
 
-function storeCache(key, value, callback) {
+function storeCache(site, key, value, callback) {
     var cache_dir = __dirname + '/cache/' + key.split('/')[0];
     
     fs.lstat(cache_dir, function(err, stats) {
         if (err) fs.mkdir(cache_dir);
         
-        fs.writeFile(__dirname + '/cache/' + key, value, 'binary', (err) => {
+        fs.writeFile(__dirname + '/cache/' + key, value.toString('binary'), (err) => {
             if (err) console.log(err);
-            memory_cache[key] = value;
+   
+            if (site.config.cache_in_memory)
+                memory_cache[key] = value;
 
             callback();
         });
