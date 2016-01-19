@@ -22,11 +22,12 @@ middleware.use(gateway);
 
 http.createServer(middleware).listen(8080);
 
+/*
 https.createServer({
   key: fs.readFileSync('/etc/letsencrypt/live/privkey.pem'),
   cert: fs.readFileSync('/etc/letsencrypt/live/fullchain.pem')
 }, middleware).listen(443);
-    
+*/
     
 function gateway(req, res, errorHandler) {
     if (typeof req.site.host_forward !=='undefined') {
